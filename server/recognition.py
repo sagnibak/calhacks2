@@ -1,6 +1,10 @@
 import cv2
 import numpy as np
+from PIL import Image
 import tensorflow as tf
+
+import base64
+from io import BytesIO
 
 global_graph = tf.Graph()
 
@@ -35,7 +39,8 @@ print('input_img:', input_img)
 
 def predict(img):
     img = cv2.imread(img, 1)  # convert image to numpy array
-    # img = cv2.resize(img, (300, 300))  # resize to 300 x 300
+    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    img = cv2.resize(img, (300, 300))  # resize to 300 x 300
     img = np.expand_dims(img, axis=0)
     output = {}
     output['classes'] = global_session.run(detection_classes, feed_dict={input_img: img})
@@ -43,7 +48,37 @@ def predict(img):
     output['scores'] = global_session.run(detection_scores, feed_dict={input_img: img})
     output['num_detections'] = global_session.run(num_detections, feed_dict={input_img: img})
 
-    return output
+    return img, output
+
+def draw_box(img):
+    img_array, prediction_dict = predict(img)
+    top_boxes = prediction_dict['boxes'][:, :3, :][0, :]
+    top_labels = [categories(int(code)) for idx, code in enumerate(list(prediction_dict['classes'][0])) if idx < 3]
+    img_array = img_array.reshape(300, 300, 3)
+
+    for idx, (box, label) in enumerate(zip(list(top_boxes), top_labels)):
+        color = [(255, 0, 0), (0, 255, 0), (0, 0, 255)][idx]
+        draw_one_box(img_array, box, color, label)
+    
+    return img_array
+
+def b64_to_img(b64_str):
+    im = Image.open(BytesIO(base64.b64decode(b64_str)))
+    i = np.asarray(im)
+    return i
+
+# this is working
+def img_to_b64(img_arr):
+    compressed_img_arr = cv2.imencode('.jpg', img_arr)[1]
+    b64_str = base64.b64encode(compressed_img_arr)
+    return b64_str
+    
+def draw_one_box(img, box, color, label):
+    box = 300 * box
+    xmin, ymin, xmax, ymax = list(box)
+    cv2.rectangle(img, (xmin, ymin), (xmax, ymax), color, 3)
+    print(label)
+    # cv2.putText(img, label, (xmax, ymax), cv2.FONT_HERSHEY_SIMPLEX, 4, color, 2, cv2.LINE_AA)
 
 def categories(idx):  # 80 classes
     try:
